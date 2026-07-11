@@ -51,6 +51,15 @@ class BZK_Admin {
 	}
 
 	/**
+	 * Short human label for an item — used in the cart, at checkout and in order notes,
+	 * so the buyer can see what they're paying to boost.
+	 */
+	public static function item_label( $type, $id ) {
+		$info = self::describe( $type, $id );
+		return $info['label'];
+	}
+
+	/**
 	 * Human label + link for a boosted item, whatever kind it is.
 	 */
 	private static function describe( $type, $id ) {

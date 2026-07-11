@@ -3,7 +3,7 @@
  * Plugin Name:       Buzzakoo Post Boost
  * Plugin URI:        https://buzzakoo.com/
  * Description:       Lets users "boost" (bump) an item so it jumps back to the top of the public feeds — BuddyPress activity stream, WordPress post archives and bbPress topics. Boost state is stored in the database, so it survives page refreshes and cache flushes.
- * Version:           1.0.0
+ * Version:           1.1.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Anirudha Talmale
@@ -13,7 +13,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'BZK_BOOST_VERSION', '1.0.0' );
+define( 'BZK_BOOST_VERSION', '1.1.0' );
 define( 'BZK_BOOST_FILE', __FILE__ );
 define( 'BZK_BOOST_DIR', plugin_dir_path( __FILE__ ) );
 define( 'BZK_BOOST_URL', plugin_dir_url( __FILE__ ) );
@@ -28,6 +28,7 @@ require_once BZK_BOOST_DIR . 'includes/class-bzk-ui.php';
 require_once BZK_BOOST_DIR . 'includes/class-bzk-activity.php';
 require_once BZK_BOOST_DIR . 'includes/class-bzk-posts.php';
 require_once BZK_BOOST_DIR . 'includes/class-bzk-bbpress.php';
+require_once BZK_BOOST_DIR . 'includes/class-bzk-woo.php';
 require_once BZK_BOOST_DIR . 'includes/class-bzk-admin.php';
 
 register_activation_hook( __FILE__, array( 'BZK_Install', 'activate' ) );
@@ -49,6 +50,9 @@ function bzk_boost_init() {
 	BZK_Activity::init();
 	BZK_Posts::init();
 	BZK_BBPress::init();
+
+	// Paid boosts through WooCommerce (no-ops if WooCommerce isn't active).
+	BZK_Woo::init();
 
 	// Housekeeping for expired boosts.
 	add_action( 'bzk_boost_cleanup', array( 'BZK_Store', 'purge_expired' ) );

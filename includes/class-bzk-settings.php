@@ -13,6 +13,18 @@ class BZK_Settings {
 
 	public static function init() {
 		add_action( 'admin_init', array( __CLASS__, 'register' ) );
+
+		/*
+		 * Settings are memoised for the request. Anything that writes the option directly
+		 * — our own WooCommerce product sync, WP-CLI, another plugin — would otherwise
+		 * leave this class serving stale values for the rest of that request.
+		 */
+		add_action( 'update_option_' . self::OPTION, array( __CLASS__, 'flush' ) );
+		add_action( 'add_option_' . self::OPTION, array( __CLASS__, 'flush' ) );
+	}
+
+	public static function flush() {
+		self::$cache = null;
 	}
 
 	public static function defaults() {
@@ -34,6 +46,18 @@ class BZK_Settings {
 			'user_cooldown_minutes'=> 0,   // Per user: minimum gap between any two boosts by the same user.
 			'max_boosts_per_item'  => 0,   // 0 = unlimited.
 			'max_boosted_items'    => 0,   // 0 = unlimited concurrent boosted items; N = only newest N stay boosted.
+
+			// Paid boosts (via the site's existing WooCommerce checkout).
+			'paid_boosts'          => 0,   // Charge for boosts.
+			'paid_author_only'     => 1,   // Users may only buy a boost for their OWN item.
+			'packages'             => array(
+				array(
+					'label'          => 'Boost — 24 hours',
+					'price'          => '5',
+					'duration_hours' => 24,
+					'product_id'     => 0,
+				),
+			),
 
 			// Presentation.
 			'button_label'         => 'Boost',
@@ -83,10 +107,34 @@ class BZK_Settings {
 		$defaults = self::defaults();
 		$out      = self::all();
 
-		$checkboxes = array( 'enable_activity', 'enable_posts', 'enable_bbpress', 'allow_author', 'allow_guests', 'show_count', 'above_sticky', 'purge_cache' );
+		$checkboxes = array( 'enable_activity', 'enable_posts', 'enable_bbpress', 'allow_author', 'allow_guests', 'show_count', 'above_sticky', 'purge_cache', 'paid_boosts', 'paid_author_only' );
 		foreach ( $checkboxes as $key ) {
 			$out[ $key ] = empty( $input[ $key ] ) ? 0 : 1;
 		}
+
+		// Boost packages. Keep the existing product_id so we update the same WC product
+		// rather than orphaning it and creating a new one on every save.
+		$packages = array();
+		if ( ! empty( $input['packages'] ) && is_array( $input['packages'] ) ) {
+			foreach ( $input['packages'] as $row ) {
+				$label = isset( $row['label'] ) ? sanitize_text_field( $row['label'] ) : '';
+				$raw   = isset( $row['price'] ) ? $row['price'] : '';
+				$price = function_exists( 'wc_format_decimal' ) ? wc_format_decimal( $raw ) : (string) (float) $raw;
+
+				// A package with no label or no price is a blank row — drop it.
+				if ( '' === $label || '' === $price ) {
+					continue;
+				}
+
+				$packages[] = array(
+					'label'          => $label,
+					'price'          => $price,
+					'duration_hours' => isset( $row['duration_hours'] ) ? max( 0, (int) $row['duration_hours'] ) : 24,
+					'product_id'     => isset( $row['product_id'] ) ? (int) $row['product_id'] : 0,
+				);
+			}
+		}
+		$out['packages'] = $packages;
 
 		$ints = array( 'boost_duration_hours', 'cooldown_minutes', 'user_cooldown_minutes', 'max_boosts_per_item', 'max_boosted_items' );
 		foreach ( $ints as $key ) {
@@ -225,7 +273,85 @@ class BZK_Settings {
 					</tr>
 				</table>
 
+				<h2 class="title"><?php esc_html_e( 'Paid boosts', 'buzzakoo-boost' ); ?></h2>
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Charge for boosts', 'buzzakoo-boost' ); ?></th>
+						<td>
+							<label>
+								<input type="checkbox" name="<?php echo esc_attr( $name ); ?>[paid_boosts]" value="1" <?php checked( $s['paid_boosts'] ); ?> <?php disabled( ! BZK_Woo::available() ); ?> />
+								<?php esc_html_e( 'Users must pay to boost (uses your existing WooCommerce checkout)', 'buzzakoo-boost' ); ?>
+							</label>
+							<?php if ( ! BZK_Woo::available() ) : ?>
+								<em><?php esc_html_e( '— WooCommerce not active', 'buzzakoo-boost' ); ?></em>
+							<?php endif; ?>
+							<p class="description">
+								<?php esc_html_e( 'The boost is applied only once WooCommerce confirms the order is PAID — not when the user clicks Boost, and not when the order is merely created. Refunding or cancelling the order removes the boost again.', 'buzzakoo-boost' ); ?>
+							</p>
+							<p class="description">
+								<?php esc_html_e( 'Administrators always boost for free.', 'buzzakoo-boost' ); ?>
+							</p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Whose posts', 'buzzakoo-boost' ); ?></th>
+						<td>
+							<label>
+								<input type="checkbox" name="<?php echo esc_attr( $name ); ?>[paid_author_only]" value="1" <?php checked( $s['paid_author_only'] ); ?> />
+								<?php esc_html_e( 'Users may only buy a boost for their OWN posts', 'buzzakoo-boost' ); ?>
+							</label>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Packages', 'buzzakoo-boost' ); ?></th>
+						<td>
+							<table class="widefat" style="max-width:640px;">
+								<thead>
+									<tr>
+										<th><?php esc_html_e( 'Label (shown on the button)', 'buzzakoo-boost' ); ?></th>
+										<th style="width:110px;"><?php esc_html_e( 'Price', 'buzzakoo-boost' ); ?></th>
+										<th style="width:130px;"><?php esc_html_e( 'Duration (hours)', 'buzzakoo-boost' ); ?></th>
+									</tr>
+								</thead>
+								<tbody>
+								<?php
+								$packages = (array) $s['packages'];
+								// Always render one spare blank row so a new package can be added.
+								$packages[] = array(
+									'label'          => '',
+									'price'          => '',
+									'duration_hours' => 24,
+									'product_id'     => 0,
+								);
+
+								foreach ( $packages as $i => $package ) :
+									?>
+									<tr>
+										<td>
+											<input type="text" style="width:100%;" name="<?php echo esc_attr( $name ); ?>[packages][<?php echo (int) $i; ?>][label]" value="<?php echo esc_attr( $package['label'] ); ?>" placeholder="<?php esc_attr_e( 'e.g. Boost — 24 hours', 'buzzakoo-boost' ); ?>" />
+											<input type="hidden" name="<?php echo esc_attr( $name ); ?>[packages][<?php echo (int) $i; ?>][product_id]" value="<?php echo (int) $package['product_id']; ?>" />
+										</td>
+										<td>
+											<input type="text" style="width:100%;" name="<?php echo esc_attr( $name ); ?>[packages][<?php echo (int) $i; ?>][price]" value="<?php echo esc_attr( $package['price'] ); ?>" placeholder="5.00" />
+										</td>
+										<td>
+											<input type="number" min="0" style="width:100%;" name="<?php echo esc_attr( $name ); ?>[packages][<?php echo (int) $i; ?>][duration_hours]" value="<?php echo esc_attr( $package['duration_hours'] ); ?>" />
+										</td>
+									</tr>
+								<?php endforeach; ?>
+								</tbody>
+							</table>
+							<p class="description">
+								<?php esc_html_e( 'Each package becomes a hidden WooCommerce product, so it uses your existing payment gateways, currency, tax and order history. Clear a package\'s label to delete it. Duration 0 = the boost never expires.', 'buzzakoo-boost' ); ?>
+							</p>
+						</td>
+					</tr>
+				</table>
+
 				<h2 class="title"><?php esc_html_e( 'Boost rules', 'buzzakoo-boost' ); ?></h2>
+				<p class="description" style="max-width:700px;">
+					<?php esc_html_e( 'These rules govern FREE boosting. A paid boost is never refused for a cooldown or a cap — the user has paid for it.', 'buzzakoo-boost' ); ?>
+				</p>
 				<table class="form-table" role="presentation">
 					<tr>
 						<th scope="row"><label for="bzk_duration"><?php esc_html_e( 'Boost lasts for', 'buzzakoo-boost' ); ?></label></th>

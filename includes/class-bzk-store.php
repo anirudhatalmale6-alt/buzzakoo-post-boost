@@ -58,10 +58,25 @@ class BZK_Store {
 	/**
 	 * Boost an item. Enforces every rule in the settings panel.
 	 *
+	 * @param array $args {
+	 *     @type bool $bypass_rules   Skip permission/cooldown/cap checks. Used by the PAID
+	 *                                path only: those rules gate the free boost, and refusing
+	 *                                a boost somebody has just paid for would be theft.
+	 *     @type int  $duration_hours Override the configured boost duration (paid packages
+	 *                                each carry their own).
+	 * }
 	 * @return true|WP_Error
 	 */
-	public static function boost( $object_type, $object_id, $user_id = 0 ) {
+	public static function boost( $object_type, $object_id, $user_id = 0, $args = array() ) {
 		global $wpdb;
+
+		$args = wp_parse_args(
+			$args,
+			array(
+				'bypass_rules'   => false,
+				'duration_hours' => null,
+			)
+		);
 
 		if ( ! self::valid_type( $object_type ) ) {
 			return new WP_Error( 'bzk_bad_type', __( 'Unknown item type.', 'buzzakoo-boost' ) );
@@ -74,14 +89,24 @@ class BZK_Store {
 			$user_id = get_current_user_id();
 		}
 
-		$allowed = BZK_Rules::can_boost( $object_type, $object_id, $user_id );
-		if ( is_wp_error( $allowed ) ) {
-			return $allowed;
+		if ( $args['bypass_rules'] ) {
+			// Even on the paid path, refuse to boost something that no longer exists.
+			if ( ! BZK_Rules::object_exists( $object_type, $object_id ) ) {
+				return new WP_Error( 'bzk_missing', __( 'That item no longer exists.', 'buzzakoo-boost' ) );
+			}
+		} else {
+			$allowed = BZK_Rules::can_boost( $object_type, $object_id, $user_id );
+			if ( is_wp_error( $allowed ) ) {
+				return $allowed;
+			}
 		}
 
-		$duration = (int) BZK_Settings::get( 'boost_duration_hours' );
-		$now      = self::now_utc();
-		$expires  = $duration > 0 ? gmdate( 'Y-m-d H:i:s', time() + ( $duration * HOUR_IN_SECONDS ) ) : null;
+		$duration = null === $args['duration_hours']
+			? (int) BZK_Settings::get( 'boost_duration_hours' )
+			: (int) $args['duration_hours'];
+
+		$now     = self::now_utc();
+		$expires = $duration > 0 ? gmdate( 'Y-m-d H:i:s', time() + ( $duration * HOUR_IN_SECONDS ) ) : null;
 
 		$table = BZK_Install::boosts_table();
 

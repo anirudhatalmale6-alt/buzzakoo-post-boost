@@ -37,6 +37,24 @@ class BZK_Rules {
 			);
 		}
 
+		/*
+		 * Paid mode. Boosting is a purchase, so the free path is closed here and the caller
+		 * is sent to checkout instead. Admins keep boosting free — they need to be able to
+		 * pin things and fix mistakes without paying their own site.
+		 */
+		if ( ! $is_admin && BZK_Woo::is_paid() ) {
+			// "Boost your own ad" — you may only buy a boost for something that is yours.
+			if ( BZK_Settings::get( 'paid_author_only' ) && ! self::is_author( $object_type, $object_id, $user_id ) ) {
+				return new WP_Error( 'bzk_not_yours', __( 'You can only boost your own posts.', 'buzzakoo-boost' ) );
+			}
+
+			return new WP_Error(
+				'bzk_payment_required',
+				__( 'Boosting this requires payment.', 'buzzakoo-boost' ),
+				array( 'checkout_url' => BZK_Woo::checkout_url( $object_type, $object_id ) )
+			);
+		}
+
 		// Lifetime cap for this item.
 		$max = (int) BZK_Settings::get( 'max_boosts_per_item' );
 		if ( $max > 0 && BZK_Store::lifetime_count( $object_type, $object_id ) >= $max ) {
@@ -100,7 +118,7 @@ class BZK_Rules {
 		return false;
 	}
 
-	private static function object_exists( $object_type, $object_id ) {
+	public static function object_exists( $object_type, $object_id ) {
 		$object_id = (int) $object_id;
 
 		if ( 'activity' === $object_type ) {
@@ -149,7 +167,7 @@ class BZK_Rules {
 		return (bool) array_intersect( $allowed, (array) $user->roles );
 	}
 
-	private static function is_author( $object_type, $object_id, $user_id ) {
+	public static function is_author( $object_type, $object_id, $user_id ) {
 		if ( 'activity' === $object_type ) {
 			if ( ! function_exists( 'bp_activity_get_specific' ) ) {
 				return false;

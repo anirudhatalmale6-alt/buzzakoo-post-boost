@@ -53,8 +53,19 @@
 
 		btn.classList.toggle( 'is-boosted', !! state.boosted );
 
+		// Paid mode: the button carries a price and goes to checkout, not to /boost.
+		btn.dataset.bzkPay = state.requires_payment ? '1' : '';
+		btn.dataset.bzkCheckout = state.checkout_url || '';
+		btn.classList.toggle( 'is-paid', !! state.requires_payment );
+
 		if ( label ) {
-			label.textContent = state.boosted ? cfg.i18n.boosted : cfg.i18n.boost;
+			if ( state.boosted ) {
+				label.textContent = cfg.i18n.boosted;
+			} else if ( state.requires_payment && state.price_label ) {
+				label.textContent = state.price_label;
+			} else {
+				label.textContent = cfg.i18n.boost;
+			}
 		}
 
 		if ( count ) {
@@ -116,8 +127,10 @@
 			return;
 		}
 
-		if ( ! cfg.loggedIn && ! btn.dataset.bzkGuest ) {
-			// Server still decides; this is only a fast path for the common case.
+		// Paid boost: straight to checkout. Nothing is boosted until the money lands.
+		if ( btn.dataset.bzkPay === '1' && btn.dataset.bzkCheckout ) {
+			window.location.href = btn.dataset.bzkCheckout;
+			return;
 		}
 
 		btn.dataset.bzkBusy = '1';
@@ -148,6 +161,16 @@
 			} )
 			.then( function ( res ) {
 				btn.dataset.bzkBusy = '';
+
+				/*
+				 * Paid mode turned on (or the package changed) after this page was rendered
+				 * or cached. The server tells us so; send them to checkout rather than
+				 * showing a confusing error.
+				 */
+				if ( res.body && res.body.requires_payment && res.body.checkout_url ) {
+					window.location.href = res.body.checkout_url;
+					return;
+				}
 
 				if ( ! res.ok || ! res.body || ! res.body.success ) {
 					if ( label ) {

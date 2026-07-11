@@ -126,13 +126,65 @@ class BZK_Rest {
 		$cooldown = BZK_Rules::item_cooldown_remaining( $type, $id );
 		$user_cd  = BZK_Rules::user_cooldown_remaining( get_current_user_id() );
 
-		return array(
-			'boosted'     => (bool) $boost,
-			'count'       => $boost ? (int) $boost->boost_count : BZK_Store::lifetime_count( $type, $id ),
-			'expires_at'  => $boost && $boost->expires_at ? mysql_to_rfc3339( $boost->expires_at ) : null,
-			'can_boost'   => ! is_wp_error( $allowed ),
-			'reason'      => is_wp_error( $allowed ) ? $allowed->get_error_message() : '',
-			'retry_after' => max( $cooldown, $user_cd ),
+		$is_error = is_wp_error( $allowed );
+		$code     = $is_error ? $allowed->get_error_code() : '';
+
+		/*
+		 * "Payment required" is not a refusal — it's a price tag. The button stays
+		 * clickable and sends the user to checkout instead of boosting.
+		 */
+		$needs_payment = ( 'bzk_payment_required' === $code );
+
+		$state = array(
+			'boosted'         => (bool) $boost,
+			'count'           => $boost ? (int) $boost->boost_count : BZK_Store::lifetime_count( $type, $id ),
+			'expires_at'      => $boost && $boost->expires_at ? mysql_to_rfc3339( $boost->expires_at ) : null,
+			'can_boost'       => ! $is_error || $needs_payment,
+			'reason'          => $is_error && ! $needs_payment ? $allowed->get_error_message() : '',
+			'retry_after'     => max( $cooldown, $user_cd ),
+			'requires_payment' => $needs_payment,
+			'checkout_url'    => '',
+			'price_label'     => '',
+		);
+
+		if ( $needs_payment ) {
+			$data                   = $allowed->get_error_data();
+			$state['checkout_url']  = isset( $data['checkout_url'] ) ? $data['checkout_url'] : '';
+			$state['price_label']   = self::price_label();
+
+			// No package configured yet — nothing to sell, so don't offer a broken button.
+			if ( ! $state['checkout_url'] ) {
+				$state['can_boost'] = false;
+				$state['reason']    = __( 'Boosting is not available right now.', 'buzzakoo-boost' );
+			}
+		}
+
+		return $state;
+	}
+
+	/**
+	 * Button text for the paid path, e.g. "Boost — $5.00".
+	 */
+	private static function price_label() {
+		$package = BZK_Woo::get_package( 0 );
+		if ( ! $package ) {
+			return '';
+		}
+
+		/*
+		 * wc_price() returns markup with the currency symbol as an HTML entity ("&#36;").
+		 * The button writes its label with textContent, so the entity has to be decoded
+		 * here or the user literally reads "Boost — &#36;5.00".
+		 */
+		$price = function_exists( 'wc_price' )
+			? html_entity_decode( wp_strip_all_tags( wc_price( (float) $package['price'] ) ), ENT_QUOTES, 'UTF-8' )
+			: (string) $package['price'];
+
+		return sprintf(
+			/* translators: 1: button label e.g. "Boost", 2: price. */
+			__( '%1$s — %2$s', 'buzzakoo-boost' ),
+			BZK_Settings::get( 'button_label' ),
+			$price
 		);
 	}
 
@@ -143,8 +195,27 @@ class BZK_Rest {
 		$result = BZK_Store::boost( $type, $id );
 
 		if ( is_wp_error( $result ) ) {
-			$code   = $result->get_error_code();
-			$status = in_array( $code, array( 'bzk_forbidden' ), true ) ? 403
+			$code = $result->get_error_code();
+
+			/*
+			 * Paid mode: don't boost, and don't error either — hand back the checkout URL
+			 * so the button can send them to pay. The boost gets applied later, by
+			 * BZK_Woo, once WooCommerce confirms the money actually arrived.
+			 */
+			if ( 'bzk_payment_required' === $code ) {
+				$data     = $result->get_error_data();
+				$response = rest_ensure_response(
+					array(
+						'success'          => false,
+						'requires_payment' => true,
+						'checkout_url'     => isset( $data['checkout_url'] ) ? $data['checkout_url'] : '',
+					)
+				);
+				$response->header( 'Cache-Control', 'no-store, max-age=0' );
+				return $response;
+			}
+
+			$status = in_array( $code, array( 'bzk_forbidden', 'bzk_not_yours' ), true ) ? 403
 				: ( in_array( $code, array( 'bzk_cooldown', 'bzk_user_cooldown', 'bzk_max_reached' ), true ) ? 429 : 400 );
 
 			$result->add_data( array( 'status' => $status ), $code );
