@@ -1,0 +1,113 @@
+/**
+ * Buzzakoo Post Boost.
+ *
+ * Deliberately low-specificity and colour-neutral: the button inherits the theme's
+ * font and accent colour rather than imposing its own, so it sits naturally in
+ * SocialV's activity action bar. Add theme classes in Settings → Post Boost to make
+ * it adopt the theme's button styling wholesale.
+ */
+
+.bzk-boost-wrap {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	vertical-align: middle;
+}
+
+.bzk-boost-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+
+	padding: 6px 12px;
+	border: 1px solid currentColor;
+	border-radius: 999px;
+
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	font-size: 0.875em;
+	line-height: 1.2;
+
+	cursor: pointer;
+	opacity: 0.85;
+	transition: opacity 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
+}
+
+.bzk-boost-btn:hover:not(:disabled),
+.bzk-boost-btn:focus-visible:not(:disabled) {
+	opacity: 1;
+	background-color: rgba(127, 127, 127, 0.12);
+}
+
+.bzk-boost-btn:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.bzk-boost-btn.is-boosted {
+	opacity: 1;
+	font-weight: 600;
+}
+
+.bzk-boost-btn.is-boosted .bzk-boost-icon {
+	transform: translateY(-1px);
+}
+
+.bzk-boost-icon {
+	display: inline-flex;
+	transition: transform 0.15s ease;
+}
+
+.bzk-boost-count {
+	font-variant-numeric: tabular-nums;
+	opacity: 0.7;
+	font-size: 0.9em;
+}
+
+.bzk-boost-count::before {
+	content: "·";
+	margin-right: 4px;
+}
+
+/* Nudge upward on a successful boost — reinforces "this jumped to the top". */
+.bzk-just-boosted {
+	animation: bzk-bump 0.6s ease;
+}
+
+@keyframes bzk-bump {
+	0%   { transform: translateY(0); }
+	35%  { transform: translateY(-5px); }
+	100% { transform: translateY(0); }
+}
+
+.bzk-boost-msg {
+	font-size: 0.8em;
+	opacity: 0.85;
+}
+
+.bzk-boost-msg.is-error {
+	color: #c0392b;
+}
+
+/* Small screens: the message wraps under the button rather than squeezing it. */
+@media (max-width: 480px) {
+	.bzk-boost-wrap {
+		flex-wrap: wrap;
+		gap: 4px;
+	}
+
+	.bzk-boost-msg {
+		flex-basis: 100%;
+	}
+}
+
+/* Respect users who ask for less motion. */
+@media (prefers-reduced-motion: reduce) {
+	.bzk-boost-btn,
+	.bzk-boost-icon,
+	.bzk-just-boosted {
+		transition: none;
+		animation: none;
+	}
+}
