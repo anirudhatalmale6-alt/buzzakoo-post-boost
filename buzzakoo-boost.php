@@ -9,14 +9,19 @@
  * Author:            Anirudha Talmale
  * License:           GPL-2.0-or-later
  * Text Domain:       buzzakoo-boost
+ *
+ * This file deliberately declares NO functions of its own — see includes/functions.php.
+ *
+ * @package buzzakoo-boost
  */
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * A second copy of this plugin (e.g. installed from a differently-named zip) would
- * otherwise redeclare our functions and take the whole site down with a fatal.
- * Stand down instead, and tell the admin which copy is the duplicate.
+ * If a second copy of this plugin is installed (an extra download landing in a
+ * differently-named folder), it must stand down rather than redeclare everything
+ * and take the whole site down with a fatal. Because the guard returns before the
+ * requires below, the duplicate copy loads no classes and no functions at all.
  */
 if ( defined( 'BZK_BOOST_VERSION' ) ) {
 	add_action(
@@ -26,7 +31,7 @@ if ( defined( 'BZK_BOOST_VERSION' ) ) {
 				return;
 			}
 			echo '<div class="notice notice-warning"><p><strong>Buzzakoo Post Boost:</strong> '
-				. esc_html__( 'Two copies of this plugin are installed. This one is doing nothing — deactivate and delete the duplicate under Plugins to keep things tidy.', 'buzzakoo-boost' )
+				. esc_html__( 'Two copies of this plugin are installed. This copy is switched off and doing nothing — your boosts still work. Delete the duplicate under Plugins to tidy up.', 'buzzakoo-boost' )
 				. '</p></div>';
 		}
 	);
@@ -50,58 +55,9 @@ require_once BZK_BOOST_DIR . 'includes/class-bzk-posts.php';
 require_once BZK_BOOST_DIR . 'includes/class-bzk-bbpress.php';
 require_once BZK_BOOST_DIR . 'includes/class-bzk-woo.php';
 require_once BZK_BOOST_DIR . 'includes/class-bzk-admin.php';
+require_once BZK_BOOST_DIR . 'includes/functions.php';
 
 register_activation_hook( __FILE__, array( 'BZK_Install', 'activate' ) );
 register_deactivation_hook( __FILE__, array( 'BZK_Install', 'deactivate' ) );
 
-/**
- * Boot the plugin once all other plugins (BuddyPress, bbPress) are loaded,
- * so we can reliably detect which integrations to switch on.
- */
-function bzk_boost_init() {
-	BZK_Install::maybe_upgrade();
-
-	BZK_Rest::init();
-	BZK_UI::init();
-	BZK_Admin::init();
-	BZK_Settings::init();
-
-	// Feed integrations — each one no-ops if its host plugin is absent.
-	BZK_Activity::init();
-	BZK_Posts::init();
-	BZK_BBPress::init();
-
-	// Paid boosts through WooCommerce (no-ops if WooCommerce isn't active).
-	BZK_Woo::init();
-
-	// Housekeeping for expired boosts.
-	add_action( 'bzk_boost_cleanup', array( 'BZK_Store', 'purge_expired' ) );
-}
 add_action( 'plugins_loaded', 'bzk_boost_init', 20 );
-
-/**
- * Template tag — echo a boost button anywhere in a theme.
- *
- * Example: <?php if ( function_exists( 'bzk_boost_button' ) ) bzk_boost_button( 'post', get_the_ID() ); ?>
- *
- * @param string $object_type activity|post|topic
- * @param int    $object_id   ID of the item.
- */
-function bzk_boost_button( $object_type = 'post', $object_id = 0 ) {
-	if ( ! $object_id && 'post' === $object_type ) {
-		$object_id = get_the_ID();
-	}
-	echo BZK_UI::get_button( $object_type, (int) $object_id ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- markup built and escaped in BZK_UI.
-}
-
-/**
- * Programmatic boost. Returns true on success, WP_Error on failure.
- *
- * @param string $object_type activity|post|topic
- * @param int    $object_id   ID of the item.
- * @param int    $user_id     Optional user performing the boost.
- * @return true|WP_Error
- */
-function bzk_boost( $object_type, $object_id, $user_id = 0 ) {
-	return BZK_Store::boost( $object_type, (int) $object_id, (int) $user_id );
-}
