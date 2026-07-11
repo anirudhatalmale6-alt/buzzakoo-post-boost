@@ -17,7 +17,9 @@ reset() {
 setopt() { $WPE "\$s=get_option('bzk_boost_settings'); $1 update_option('bzk_boost_settings',\$s);" >/dev/null 2>&1; }
 
 defaults() {
-  setopt '$s["enable_activity"]=1; $s["enable_posts"]=1; $s["enable_bbpress"]=1;
+  # paid_boosts=0: this suite exercises the FREE path. The plugin now SHIPS with paid
+  # mode on (client's $5/24h), so it has to be explicitly turned off here.
+  setopt '$s["paid_boosts"]=0; $s["enable_activity"]=1; $s["enable_posts"]=1; $s["enable_bbpress"]=1;
           $s["post_types"]=array("post"); $s["allow_roles"]=array("administrator","editor","author","contributor","subscriber");
           $s["allow_author"]=1; $s["allow_guests"]=0; $s["boost_duration_hours"]=24;
           $s["cooldown_minutes"]=0; $s["user_cooldown_minutes"]=0; $s["max_boosts_per_item"]=0;

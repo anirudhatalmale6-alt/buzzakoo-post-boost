@@ -3,7 +3,7 @@
  * Plugin Name:       Buzzakoo Post Boost
  * Plugin URI:        https://buzzakoo.com/
  * Description:       Lets users "boost" (bump) an item so it jumps back to the top of the public feeds — BuddyPress activity stream, WordPress post archives and bbPress topics. Boost state is stored in the database, so it survives page refreshes and cache flushes.
- * Version:           1.1.0
+ * Version:           1.2.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Anirudha Talmale
@@ -13,7 +13,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'BZK_BOOST_VERSION', '1.1.0' );
+define( 'BZK_BOOST_VERSION', '1.2.0' );
 define( 'BZK_BOOST_FILE', __FILE__ );
 define( 'BZK_BOOST_DIR', plugin_dir_path( __FILE__ ) );
 define( 'BZK_BOOST_URL', plugin_dir_url( __FILE__ ) );

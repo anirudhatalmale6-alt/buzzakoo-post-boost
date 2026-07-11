@@ -48,6 +48,9 @@ class BZK_Woo {
 		// Keep the package products in step with the settings.
 		add_action( 'update_option_' . BZK_Settings::OPTION, array( __CLASS__, 'sync_products' ), 10, 0 );
 
+		// Create the shipped-by-default package product without anyone having to press Save.
+		add_action( 'admin_init', array( __CLASS__, 'ensure_products' ) );
+
 		/*
 		 * The order-lifecycle hooks are registered UNCONDITIONALLY — deliberately, and not
 		 * behind is_paid().
@@ -204,10 +207,38 @@ class BZK_Woo {
 	}
 
 	/**
+	 * Make sure every package still has a real WooCommerce product behind it.
+	 *
+	 * Self-healing on purpose: the plugin ships pre-configured with a package, so the
+	 * product has to exist without anyone visiting the settings screen and pressing Save.
+	 * It also recovers if a product is later trashed or deleted by hand — otherwise the
+	 * Boost button would quietly stop being buyable.
+	 */
+	public static function ensure_products() {
+		if ( ! self::available() || ! self::is_paid() ) {
+			return;
+		}
+
+		foreach ( self::packages() as $package ) {
+			if ( empty( $package['product_id'] ) || ! wc_get_product( $package['product_id'] ) ) {
+				self::sync_products();
+				return;
+			}
+		}
+	}
+
+	/**
 	 * URL that starts the purchase for boosting a given item.
 	 */
 	public static function checkout_url( $object_type, $object_id, $package_index = 0 ) {
 		$package = self::get_package( $package_index );
+
+		// Lazily create the product the first time it's actually needed.
+		if ( $package && ( empty( $package['product_id'] ) || ! wc_get_product( $package['product_id'] ) ) ) {
+			self::sync_products();
+			$package = self::get_package( $package_index );
+		}
+
 		if ( ! $package || empty( $package['product_id'] ) ) {
 			return '';
 		}

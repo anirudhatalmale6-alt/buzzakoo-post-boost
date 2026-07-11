@@ -47,8 +47,14 @@ class BZK_Settings {
 			'max_boosts_per_item'  => 0,   // 0 = unlimited.
 			'max_boosted_items'    => 0,   // 0 = unlimited concurrent boosted items; N = only newest N stay boosted.
 
-			// Paid boosts (via the site's existing WooCommerce checkout).
-			'paid_boosts'          => 0,   // Charge for boosts.
+			/*
+			 * Paid boosts, via the site's existing WooCommerce checkout.
+			 *
+			 * Shipped pre-configured for Buzzakoo: pay-per-boost, $5 for 24 hours, members
+			 * may only boost their own ad. Activating the plugin is all that's needed —
+			 * everything here is changeable in the settings panel afterwards.
+			 */
+			'paid_boosts'          => 1,   // Charge for boosts.
 			'paid_author_only'     => 1,   // Users may only buy a boost for their OWN item.
 			'packages'             => array(
 				array(
